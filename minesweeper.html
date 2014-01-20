@@ -1,0 +1,303 @@
+<html>
+<head>
+	<title>Minesweeper</title>
+</head>
+<body>
+
+<script>
+	var canvasHeight = 500;
+	var canvasWidth = 500;
+	var canvas = document.createElement('canvas');
+	canvas.width = canvasWidth;
+	canvas.height = canvasHeight;
+
+	document.body.appendChild(canvas);
+
+	var Box = function (flag, bomb, row, col) {
+		var box = {
+			flag: flag || false,
+			bomb: bomb || false,
+			exposed: false,
+			row: row,
+			col: col,
+			surroundingBombsCount: 0
+		};
+		return box;
+	};
+
+	var Model = function (rows, cols, boxConstructor) {
+		var that = this;
+
+		var boxConstructor = boxConstructor || Object // need to be able to call `new` on constructor
+		var dimensions = {
+			rows: rows,
+			cols: cols
+		};	
+
+		var createGrid = function (rows, cols) {
+			var grid = [];
+			for (var rowNumber = 0; rowNumber < rows; rowNumber++) {
+				var row = [];
+				for (var colNumber = 0; colNumber < cols; colNumber++) {
+					var box = new boxConstructor(false, false, rowNumber, colNumber);
+					row.push(box);
+				};
+				grid.push(row);
+			};
+			return grid;
+		};
+
+		var getSurroundingSquares = function (row, col) {
+			var surroundingSquaresArray = [];
+
+			var minRow = Math.max(row - 1, 0);
+			var maxRow = Math.min(row + 1, dimensions.rows - 1);
+
+			var minCol = Math.max(col - 1, 0);
+			var maxCol = Math.min(col + 1, dimensions.cols - 1);
+
+			// console.log("adjusted rows: ", minRow, maxRow, minCol, maxCol);
+			for (var r = minRow; r<=maxRow; r++) {
+				for (var c = minCol; c<=maxCol; c++) {
+					var box = that.grid[r][c];
+					surroundingSquaresArray.push(box);
+				};
+			};
+			// console.log(surroundingSquaresArray);
+			return surroundingSquaresArray;
+		};
+
+		var getSurroundingByKey = function (row, col, key) {
+			var surroundingSquaresArray = getSurroundingSquares(row, col);
+			var filteredArray = surroundingSquaresArray.filter(function (box) {
+				return box[key];
+			});
+			// console.log('filteredArray: ', filteredArray);
+			return filteredArray;
+		};
+
+		var getSurroundingBombs = function (row, col) {
+			// console.log("finding bombs for : ",row, col);
+			return getSurroundingByKey(row, col, 'bomb');
+		};
+
+		var seedBombs = function (numberOfBombs) {
+			var bombs = [];
+			while (numberOfBombs) {
+				var row = Math.floor(Math.random() * rows);
+				var col = Math.floor(Math.random() * cols);
+				if (!that.grid[row][col].bomb) {
+					that.grid[row][col].bomb = true;
+					numberOfBombs--;
+				}
+			}
+		};
+
+		var flipFlag = function (row, col) {
+			if (!that.grid[row][col].exposed) {
+				that.grid[row][col].flag = !that.grid[row][col].flag;
+			}
+		};
+
+		var depressBox = function (row, col) {
+			var box = that.grid[row][col];
+			if (box.exposed || box.flag) {
+				return;
+			}
+
+			if (box.bomb) {
+				// end the game
+				restartGame();
+			}
+
+			box.exposed = true;
+			var bombsArray = getSurroundingBombs(row, col);
+			box.surroundingBombsCount = bombsArray.length;
+
+			if (bombsArray.length === 0) {
+				getSurroundingSquares(row, col).forEach(function (square) {
+					depressBox(square.row, square.col);
+				});
+			}
+			// console.log("Box " + row + ", " + col + ": " + bombsArray.length + " bombs");
+
+		};
+
+		var restartGame = function () {
+			that.grid = createGrid(rows, cols);
+			seedBombs(10);
+
+		};
+
+		restartGame();
+
+		that.flipFlag = flipFlag;
+		that.depressBox = depressBox;
+		that.dimensions = dimensions;
+		that.getSurroundingBombs = getSurroundingBombs;
+		that.restartGame = restartGame;
+
+
+	};
+
+	var CanvasView = function (canvas, model) {
+		var that = this;
+		var rows = model.dimensions.rows;
+		var cols = model.dimensions.cols;
+
+		var width = canvas.getAttribute('width');
+		var height = canvas.getAttribute('height');
+
+		var boxWidth = width / rows; 
+		var boxHeight = height / cols;
+
+		var context = canvas.getContext('2d');
+		var clickHandler = canvas.addEventListener();
+
+		var clear = function (color) {
+			context.fillStyle = color || 'white';
+			context.fillRect(0, 0, width, height);
+		};
+
+		var drawGrid = function (model) {
+			var rows = model.dimensions.rows;
+			var cols = model.dimensions.cols;
+			context.fillStyle = "black";
+			context.lineWidth = 3;
+
+			for (var row=0; row<rows; row++) {
+				for (var col=0; col<cols; col++) {
+					var boxY = row * boxHeight;
+					var boxX = col * boxWidth;
+
+					context.rect(boxX, boxY, boxWidth, boxHeight);
+
+				}
+			}
+			context.stroke();			
+		};
+
+		var drawBoxes = function (grid, boxWidth, boxHeight) {
+
+			grid.forEach(function (rowArray, row) {
+				rowArray.forEach(function (box, col) {
+					var boxX = col * boxWidth;
+					var boxY = row * boxHeight;
+
+
+					if (box.flag) {
+
+						context.fillStyle = 'red';
+						context.fillRect(boxX, boxY, boxWidth, boxHeight);
+					} else if (box.exposed) {
+
+						context.fillStyle = 'white';
+						context.fillRect(boxX, boxY, boxWidth, boxHeight);
+						context.fillStyle = 'black';
+						context.font = "14px Verdana";
+						context.fillText(box.surroundingBombsCount, boxX + (boxWidth/3), boxY + (boxHeight/2));
+
+					}
+
+					if (box.bomb) {
+						// draw bombs for debugging/development purposes.
+						context.fillStyle = '#00ff00'
+						context.globalAlpha = 0.5;
+						context.fillRect(boxX, boxY, boxWidth, boxHeight);
+						context.globalAlpha = 1;
+					}
+
+				});
+			});
+		};
+
+		this.render = function (model) {
+
+
+			clear('grey');
+			drawBoxes(model.grid, boxWidth, boxHeight);
+			drawGrid(model);
+
+		};
+
+		this.registerController = function (callback) {
+			canvas.addEventListener( 'click' , function (event) {
+				var clickInfo = getRowColFromClick(event);
+				callback(clickInfo);
+
+
+
+
+				// event.preventDefault();
+			}, false);
+		};
+
+		var getRowColFromClick = function (event) {
+			var row = Math.floor(event.y / boxHeight);
+			var col = Math.floor(event.x / boxWidth);
+			var clickCoordinates = {
+				row: row,
+				col: col,
+				shift: event.shiftKey
+			};
+			return clickCoordinates;
+		};
+	};
+
+	var Controller = function (view, model) {
+		var model = model;
+		var view = view;
+
+		var startNewGame = function () {
+
+		};
+
+		var endGame = function () {
+
+		};
+
+		var clickCallback = function (modifiedClick) {
+			var row = modifiedClick.row;
+			var col = modifiedClick.col;
+
+			if (modifiedClick.shift) {
+				model.flipFlag(row, col);
+			} else {
+				model.depressBox(row, col);
+			}
+
+
+			view.render(model);
+		};
+
+		view.registerController(clickCallback); // this is where the view should get rows and cols
+
+
+	};
+
+
+
+</script>
+<script>
+	var model = new Model(10, 10, Box);
+	var view = new CanvasView(canvas, model);
+
+	var controller = new Controller(view, model);
+
+	view.render(model);
+
+	var printBoard = function () {
+		model.forEach(function (row) {
+			var bombsRow = row.map(function (box) {
+				return box.bomb === true ? "x" : "o";
+			});
+			console.log(bombsRow);
+		});
+	};
+
+
+</script>
+
+
+</body>
+</html>
