@@ -1,10 +1,34 @@
 <html>
 <head>
 	<title>Minesweeper</title>
+	<style type="text/css">
+		#losebanner {
+			display: none;
+		}
+	</style>
+
 </head>
+
+
 <body>
 
+<!-- 
+<img src="http://4.bp.blogspot.com/-HdKUCQSt0Mg/TlMYA9vjJZI/AAAAAAAAAgI/IXObGIc2N2U/s1600/rage_face.jpg" id="losebanner"></img>
+
+<script type="text/javascript">
+	var image = new Image();
+
+	var imageLoadHandler = image.addEventListener( 'load' , function (event) {
+		// losingContext.drawImage(image, 0, 0);
+	});
+
+	image.src = "http://4.bp.blogspot.com/-HdKUCQSt0Mg/TlMYA9vjJZI/AAAAAAAAAgI/IXObGIc2N2U/s1600/rage_face.jpg";
+
+</script>
+
+ -->
 <script>
+
 	var canvasHeight = 500;
 	var canvasWidth = 500;
 	var canvas = document.createElement('canvas');
@@ -25,8 +49,9 @@
 		return box;
 	};
 
-	var Model = function (rows, cols, boxConstructor) {
+	var Model = function (rows, cols, numberOfBombs, boxConstructor) {
 		var that = this;
+		window.numberOfBombs = numberOfBombs;
 
 		var boxConstructor = boxConstructor || Object // need to be able to call `new` on constructor
 		var dimensions = {
@@ -34,7 +59,7 @@
 			cols: cols
 		};	
 
-		var createGrid = function (rows, cols) {
+		function createGrid (rows, cols) {
 			var grid = [];
 			for (var rowNumber = 0; rowNumber < rows; rowNumber++) {
 				var row = [];
@@ -47,7 +72,7 @@
 			return grid;
 		};
 
-		var getSurroundingSquares = function (row, col) {
+		function getSurroundingSquares (row, col) {
 			var surroundingSquaresArray = [];
 
 			var minRow = Math.max(row - 1, 0);
@@ -56,34 +81,33 @@
 			var minCol = Math.max(col - 1, 0);
 			var maxCol = Math.min(col + 1, dimensions.cols - 1);
 
-			// console.log("adjusted rows: ", minRow, maxRow, minCol, maxCol);
 			for (var r = minRow; r<=maxRow; r++) {
 				for (var c = minCol; c<=maxCol; c++) {
 					var box = that.grid[r][c];
 					surroundingSquaresArray.push(box);
 				};
 			};
-			// console.log(surroundingSquaresArray);
 			return surroundingSquaresArray;
 		};
 
-		var getSurroundingByKey = function (row, col, key) {
+		function getSurroundingByKey (row, col, key) {
 			var surroundingSquaresArray = getSurroundingSquares(row, col);
 			var filteredArray = surroundingSquaresArray.filter(function (box) {
 				return box[key];
 			});
-			// console.log('filteredArray: ', filteredArray);
 			return filteredArray;
 		};
 
-		var getSurroundingBombs = function (row, col) {
-			// console.log("finding bombs for : ",row, col);
+
+		function getSurroundingBombs (row, col) {
 			return getSurroundingByKey(row, col, 'bomb');
 		};
 
-		var seedBombs = function (numberOfBombs) {
-			var bombs = [];
+		function seedBombs (numberOfBombs) {
+			// numberOfBombs = Math.max(numberOfBombs, (that.rows * that.cols) - 1);
+			console.log("seedBombs called: ", numberOfBombs);
 			while (numberOfBombs) {
+				console.log('seeding bomb');
 				var row = Math.floor(Math.random() * rows);
 				var col = Math.floor(Math.random() * cols);
 				if (!that.grid[row][col].bomb) {
@@ -93,21 +117,21 @@
 			}
 		};
 
-		var flipFlag = function (row, col) {
+		function flipFlag (row, col) {
 			if (!that.grid[row][col].exposed) {
 				that.grid[row][col].flag = !that.grid[row][col].flag;
 			}
 		};
 
-		var depressBox = function (row, col) {
+		function depressBox (row, col) {
 			var box = that.grid[row][col];
 			if (box.exposed || box.flag) {
 				return;
 			}
 
 			if (box.bomb) {
-				// end the game
-				restartGame();
+				restartGame(false);
+				return;
 			}
 
 			box.exposed = true;
@@ -119,17 +143,19 @@
 					depressBox(square.row, square.col);
 				});
 			}
-			// console.log("Box " + row + ", " + col + ": " + bombsArray.length + " bombs");
+		};
+
+		function restartGame (win) {
+			if (win) {
+				that.grid = createGrid(rows, cols);
+				seedBombs(numberOfBombs);
+			} else {
+				restartGame(true);
+			}
 
 		};
 
-		var restartGame = function () {
-			that.grid = createGrid(rows, cols);
-			seedBombs(10);
-
-		};
-
-		restartGame();
+		restartGame(true);
 
 		that.flipFlag = flipFlag;
 		that.depressBox = depressBox;
@@ -163,7 +189,7 @@
 			var rows = model.dimensions.rows;
 			var cols = model.dimensions.cols;
 			context.fillStyle = "black";
-			context.lineWidth = 3;
+			context.lineWidth = boxWidth / cols;
 
 			for (var row=0; row<rows; row++) {
 				for (var col=0; col<cols; col++) {
@@ -189,14 +215,17 @@
 
 						context.fillStyle = 'red';
 						context.fillRect(boxX, boxY, boxWidth, boxHeight);
+
 					} else if (box.exposed) {
 
 						context.fillStyle = 'white';
 						context.fillRect(boxX, boxY, boxWidth, boxHeight);
-						context.fillStyle = 'black';
-						context.font = "14px Verdana";
-						context.fillText(box.surroundingBombsCount, boxX + (boxWidth/3), boxY + (boxHeight/2));
 
+						if (box.surroundingBombsCount !== 0) {
+							context.fillStyle = 'black';
+							context.font = '14px Verdana';
+							context.fillText(box.surroundingBombsCount, boxX + (boxWidth/3), boxY + (boxHeight/2));							
+						}
 					}
 
 					if (box.bomb) {
@@ -226,15 +255,13 @@
 				callback(clickInfo);
 
 
-
-
 				// event.preventDefault();
 			}, false);
 		};
 
 		var getRowColFromClick = function (event) {
-			var row = Math.floor(event.y / boxHeight);
-			var col = Math.floor(event.x / boxWidth);
+			var row = Math.floor(event.offsetY / boxHeight);
+			var col = Math.floor(event.offsetX / boxWidth);
 			var clickCoordinates = {
 				row: row,
 				col: col,
@@ -248,15 +275,7 @@
 		var model = model;
 		var view = view;
 
-		var startNewGame = function () {
-
-		};
-
-		var endGame = function () {
-
-		};
-
-		var clickCallback = function (modifiedClick) {
+		function clickCallback (modifiedClick) {
 			var row = modifiedClick.row;
 			var col = modifiedClick.col;
 
@@ -266,34 +285,21 @@
 				model.depressBox(row, col);
 			}
 
-
 			view.render(model);
 		};
 
-		view.registerController(clickCallback); // this is where the view should get rows and cols
+		view.registerController(clickCallback);
 
+		view.render(model);
 
 	};
-
-
 
 </script>
 <script>
-	var model = new Model(10, 10, Box);
+	var model = new Model(30, 30, 100, Box);
 	var view = new CanvasView(canvas, model);
 
 	var controller = new Controller(view, model);
-
-	view.render(model);
-
-	var printBoard = function () {
-		model.forEach(function (row) {
-			var bombsRow = row.map(function (box) {
-				return box.bomb === true ? "x" : "o";
-			});
-			console.log(bombsRow);
-		});
-	};
 
 
 </script>
